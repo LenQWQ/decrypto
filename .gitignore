@@ -1,0 +1,7 @@
+node_modules/
+data/packs.json
+data/packs.json.*.tmp
+.env
+.shots/
+*.log
+.DS_Store

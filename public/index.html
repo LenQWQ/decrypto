@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1020">
+  <title>暗码行动 · Decrypto</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1020'/%3E%3Ctext x='32' y='44' font-size='34' text-anchor='middle' fill='%23e0b65c'%3E%E6%9A%97%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="logo">暗码行动 <span>DECRYPTO</span></div>
+      <div class="topbar-right">
+        <span id="ai-badge" class="badge" hidden></span>
+        <span id="me-badge" class="badge ghost" hidden></span>
+      </div>
+    </header>
+
+    <main>
+      <!-- 首页 -->
+      <section id="view-home" class="view">
+        <div class="hero">
+          <h1>两队加密，互相拦截</h1>
+          <p>4 个关键词，3 位密码，线索公开归档。找出对手的规律，别让自己的队友迷失。</p>
+        </div>
+
+        <div class="card">
+          <label class="field">
+            <span>你的代号</span>
+            <input id="input-name" maxlength="12" placeholder="例如：夜莺" autocomplete="nickname">
+          </label>
+
+          <div class="home-actions">
+            <button class="btn primary big" data-action="create">创建房间</button>
+            <div class="join-row">
+              <input id="input-code" maxlength="6" placeholder="房间号" autocapitalize="characters">
+              <button class="btn big" data-action="join">加入</button>
+            </div>
+          </div>
+
+          <details class="settings" id="room-settings">
+            <summary>房间设置</summary>
+            <div class="settings-grid">
+              <label class="field">
+                <span>题库</span>
+                <select id="select-pack"></select>
+              </label>
+              <label class="field">
+                <span>AI 加密</span>
+                <select id="select-ai">
+                  <option value="assist">辅助：加密者可一键生成</option>
+                  <option value="auto">全自动：每轮 AI 直接出线索</option>
+                  <option value="off">关闭</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>轮数上限</span>
+                <select id="select-rounds">
+                  <option value="8">8 轮（标准）</option>
+                  <option value="6">6 轮（快速）</option>
+                  <option value="10">10 轮</option>
+                </select>
+              </label>
+            </div>
+          </details>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>题库</h2>
+            <span class="muted small" id="pack-count"></span>
+          </div>
+          <div id="pack-list" class="pack-list"></div>
+
+          <details class="upload">
+            <summary>导入自己的题库</summary>
+            <p class="muted small">
+              支持 JSON / TXT / CSV。每行 4 个词（逗号、空格或顿号分隔）即可组成一组；
+              也可以每行一个词，系统会随机四选一。至少需要 2 组，或 8 个不同的词。
+            </p>
+            <div class="upload-grid">
+              <div>
+                <input type="file" id="file-pack" accept=".txt,.csv,.json,text/plain,application/json">
+                <textarea id="text-pack" rows="5" placeholder="或者直接粘贴，例如：&#10;灯塔,蜂蜜,电梯,谎言&#10;火山,邮票,镜子,马拉松"></textarea>
+              </div>
+              <div class="upload-side">
+                <input id="pack-name" maxlength="20" placeholder="题库名称（可留空）">
+                <button class="btn primary" data-action="upload">导入题库</button>
+                <button class="btn ghost small" data-action="refresh-packs">刷新列表</button>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <footer class="foot muted small">
+          规则改编自《截码战 / 谍报风云》· 纯网页版，手机浏览器直接开
+        </footer>
+      </section>
+
+      <!-- 房间 / 游戏由 app.js 渲染 -->
+      <section id="view-room" class="view hidden"></section>
+      <section id="view-game" class="view hidden"></section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

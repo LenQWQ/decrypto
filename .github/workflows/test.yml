@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20, 22]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: 单元测试
+        run: npm test
+
+      - name: AI 链路冒烟（mock 接口）
+        run: npm run smoke:ai
+
+      - name: Socket 联机冒烟
+        run: |
+          PORT=3010 node server.js > /tmp/decrypto-server.log 2>&1 &
+          SERVER_PID=$!
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:3010/api/health && break
+            sleep 0.5
+          done
+          npm run smoke
+          kill $SERVER_PID || true
