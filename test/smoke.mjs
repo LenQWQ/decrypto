@@ -80,12 +80,6 @@ try {
   assert(encrypt.teams.A.keywords.length === 4, 'A 队关键词数量');
   assert(encrypt.teams.A.keywords.every(Boolean), 'A 队关键词非空');
 
-  // 未配置 AI 时，加密者点 AI 应该拿到明确错误
-  const aiResult = await emit(a, 'ai_clues', {});
-  assert(aiResult.ok === false, '未配置 AI 时应返回错误');
-  assert(/AI/.test(aiResult.error), '错误信息应提到 AI');
-  console.log('AI 未配置时的提示：', aiResult.error);
-
   const cluesA = await emit(a, 'clues', { clues: ['线索甲一', '线索甲二', '线索甲三'] });
   assert(cluesA.ok, `A 提交线索失败：${cluesA.error}`);
   const cluesB = await emit(b, 'clues', { clues: ['线索乙一', '线索乙二', '线索乙三'] });
@@ -121,6 +115,12 @@ try {
     reveal.teams.A.tokens,
     reveal.teams.B.tokens
   );
+
+  // 未配置 AI 时，AI 推测关键词应返回明确错误
+  const aiResult = await emit(a, 'ai_analyze', {});
+  assert(aiResult.ok === false, '未配置 AI 时应返回错误');
+  assert(/AI/.test(aiResult.error), '错误信息应提到 AI');
+  console.log('AI 未配置时的提示：', aiResult.error);
 
   console.log('\n✅ 冒烟测试通过');
 } finally {

@@ -267,6 +267,88 @@ test('每队只有一人时允许加密者自己破译（仅用于测试流程�
   assert.equal(room.phase, PHASE.REVEAL);
 });
 
+test('破译失败后下一轮由 AI 接管加密，且全队可破译', () => {
+  const room = makeRoom({ aiMode: 'compensate' });
+  room.start('p1');
+  const A = room.teams.A;
+  const B = room.teams.B;
+
+  // 第一轮：A 破译失败
+  playRound(room, { aDecodes: false });
+  assert.equal(A.tokens.black, 1);
+  assert.equal(A.compensation, true);
+  assert.equal(B.compensation, false);
+
+  room.nextRound('p1');
+  assert.equal(A.aiEncrypt, true);
+  assert.equal(A.encoderId, 'AI');
+  assert.equal(A.humanEncoderId, 'p3', '第二轮原本轮到 p3 加密');
+  assert.equal(B.aiEncrypt, false);
+  assert.equal(B.encoderId, 'p4');
+
+  // 人类不能替 AI 提交；AI 加密时没有人能看到密码
+  assert.throws(() => room.submitClues('p3', cluesFor('A')), /AI 补偿/);
+  const view = room.publicState('p3');
+  assert.equal(view.teams.A.code, null);
+  assert.equal(view.you.isEncoder, false);
+
+  room.submitAiClues('A', cluesFor('A'));
+  room.submitClues(B.encoderId, cluesFor('B'));
+  assert.equal(room.phase, PHASE.INTERCEPT);
+
+  room.submitIntercept(A.players[0], rotate(B.code));
+  room.submitIntercept(B.players[0], rotate(A.code));
+  assert.equal(room.phase, PHASE.DECODE);
+
+  // AI 是加密者，名义上的加密者 p3 也可以参与破译
+  room.submitDecode('p3', A.code);
+  room.submitDecode(decoderFor(room, 'B'), B.code);
+  assert.equal(room.phase, PHASE.REVEAL);
+
+  // 补偿只作用一轮，下一轮恢复人工加密
+  room.nextRound('p1');
+  assert.equal(A.aiEncrypt, false);
+  assert.notEqual(A.encoderId, 'AI');
+  assert.equal(A.compensation, false);
+});
+
+test('AI 加密失败时能退回人工加密', () => {
+  const room = makeRoom({ aiMode: 'compensate' });
+  room.start('p1');
+  playRound(room, { aDecodes: false });
+  room.nextRound('p1');
+
+  assert.equal(room.teams.A.aiEncrypt, true);
+  assert.equal(room.fallbackAiToHuman('A'), true);
+  assert.equal(room.teams.A.aiEncrypt, false);
+  assert.equal(room.teams.A.encoderId, room.teams.A.humanEncoderId);
+
+  room.submitClues(room.teams.A.encoderId, cluesFor('A'));
+  room.submitClues(room.teams.B.encoderId, cluesFor('B'));
+  assert.equal(room.phase, PHASE.INTERCEPT);
+});
+
+test('关闭 AI 时破译失败不会触发补偿', () => {
+  const room = makeRoom({ aiMode: 'off' });
+  room.start('p1');
+  playRound(room, { aDecodes: false });
+
+  assert.equal(room.teams.A.compensation, false);
+  room.nextRound('p1');
+  assert.equal(room.teams.A.aiEncrypt, false);
+  assert.notEqual(room.teams.A.encoderId, 'AI');
+});
+
+test('全自动模式下每轮都由 AI 加密', () => {
+  const room = makeRoom({ aiMode: 'auto' });
+  room.start('p1');
+
+  for (const key of ['A', 'B']) {
+    assert.equal(room.teams[key].aiEncrypt, true);
+    assert.equal(room.teams[key].encoderId, 'AI');
+  }
+});
+
 test('重开一局会清空标记、档案和关键词', () => {
   const room = makeRoom({ maxRounds: 4 });
   room.start('p1');

@@ -2,7 +2,7 @@
   "name": "decrypto-lite",
   "version": "1.0.0",
   "private": true,
-  "description": "暗码行动 —— 可自建题库、支持 AI 自动加密的在线《截码战 / 谍战风云》",
+  "description": "暗码行动 —— 可自建题库、支持 AI 破译失败补偿加密的在线《截码战 / 谍战风云》",
   "main": "server.js",
   "engines": {
     "node": ">=20"

@@ -18,7 +18,7 @@ const PHASE_LABEL = {
   ended: '对局结束',
 };
 
-const AI_MODE_LABEL = { off: '关闭', assist: '辅助加密', auto: 'AI 全自动' };
+const AI_MODE_LABEL = { off: '关闭', compensate: 'AI 补偿', auto: 'AI 全自动' };
 
 let state = null;
 let packs = [];
@@ -139,8 +139,6 @@ async function handleAction(action, element) {
       return goHome();
     case 'submit-clues':
       return submitClues();
-    case 'ai-clues':
-      return aiClues(element);
     case 'submit-intercept':
       return submitCode('intercept');
     case 'submit-decode':
@@ -188,7 +186,7 @@ function currentNickname() {
 async function createRoom() {
   const name = currentNickname();
   const settings = {
-    aiMode: $('#select-ai') ? $('#select-ai').value : 'assist',
+    aiMode: $('#select-ai') ? $('#select-ai').value : 'compensate',
     maxRounds: Number($('#select-rounds') ? $('#select-rounds').value : 8) || 8,
   };
   const packId = $('#select-pack') ? $('#select-pack').value : 'default';
@@ -295,23 +293,6 @@ async function submitClues() {
   if (!ok) return;
   checkAck(await emit('clues', { clues }));
   draftClues = { key: '', values: [] };
-}
-
-async function aiClues(button) {
-  const original = button.textContent;
-  button.disabled = true;
-  button.textContent = 'AI 思考中…';
-  try {
-    const res = checkAck(await emit('ai_clues', {}));
-    const inputs = $$('.clue-input');
-    (res.clues || []).forEach((clue, index) => {
-      if (inputs[index]) inputs[index].value = clue;
-    });
-    toast(res.note ? `AI：${res.note}` : 'AI 已生成线索，可修改后提交', 'success');
-  } finally {
-    button.disabled = false;
-    button.textContent = original;
-  }
 }
 
 async function submitCode(kind) {
@@ -575,7 +556,7 @@ function renderRoom() {
     <div class="card room-foot">
       <div class="left">
         <span class="pill">${esc(state.pack.name)}</span>
-        <span class="pill">${AI_MODE_LABEL[state.aiMode] || '辅助加密'}</span>
+        <span class="pill">${AI_MODE_LABEL[state.aiMode] || 'AI 补偿'}</span>
         <span class="pill">${state.maxRounds} 轮</span>
         <span class="muted small">建议每队 2 人以上</span>
       </div>
@@ -646,13 +627,15 @@ function keywordStrip(team, teamKey) {
 }
 
 function roleLine(you, team) {
-  const encoder = nameOf(team, team.encoderId);
+  const aiEncrypt = Boolean(team.aiEncrypt);
+  const encoder = aiEncrypt ? 'AI' : nameOf(team, team.encoderId);
+  const role = aiEncrypt ? 'AI 补偿加密' : you.isEncoder ? '本轮加密者' : '破译者';
   return `<div class="role-line">
     <span class="pill ${you.team === 'A' ? 'teal' : 'rose'}">${you.team} 队</span>
-    <span class="pill ${you.isEncoder ? 'gold' : ''}">${you.isEncoder ? '本轮加密者' : '破译者'}</span>
+    <span class="pill ${aiEncrypt || you.isEncoder ? 'gold' : ''}">${role}</span>
     <span>加密者：${esc(encoder)}</span>
     <span>·</span>
-    <span>AI：${AI_MODE_LABEL[state.aiMode] || '辅助加密'}</span>
+    <span>AI：${AI_MODE_LABEL[state.aiMode] || 'AI 补偿'}</span>
   </div>`;
 }
 
@@ -721,6 +704,20 @@ function phasePanel(you, mine, opponent) {
 }
 
 function encryptPanel(you, team) {
+  if (team.aiEncrypt) {
+    if (team.submissions.clues) {
+      return (
+        cluesCard('AI 已提交线索', team.clues, '等待另一方…') +
+        waitingCard('等待对手提交线索', '双方都提交后进入拦截阶段', true)
+      );
+    }
+    const reason =
+      state.aiMode === 'auto'
+        ? '全自动模式：本轮由 AI 出线索'
+        : '上轮本队破译失败，本轮触发 AI 补偿加密';
+    return waitingCard('AI 正在为你们加密…', `${reason}；线索提交后全队一起破译`, true);
+  }
+
   if (team.submissions.clues) {
     return (
       cluesCard('本轮线索已提交', team.clues, '等待另一方…') +
@@ -729,10 +726,9 @@ function encryptPanel(you, team) {
   }
 
   if (!you.isEncoder) {
-    const auto = state.aiMode === 'auto' || team.aiRunning;
     return waitingCard(
-      auto ? 'AI 正在自动加密…' : `加密者 ${nameOf(team, team.encoderId)} 正在写线索`,
-      auto ? '线索生成后会进入拦截阶段' : '线索提交后，双方进入拦截阶段',
+      `加密者 ${nameOf(team, team.encoderId)} 正在写线索`,
+      '线索提交后，双方进入拦截阶段',
       true
     );
   }
@@ -768,19 +764,8 @@ function encryptPanel(you, team) {
     </div>
 
     <div class="actions">
-      ${
-        config.ai.configured
-          ? '<button class="btn" data-action="ai-clues">✨ AI 生成线索</button>'
-          : ''
-      }
       <button class="btn primary" data-action="submit-clues">提交线索</button>
     </div>
-
-    ${
-      state.aiMode === 'auto'
-        ? '<p class="muted small" style="margin-top:10px">全自动模式：AI 正在生成，你也可以直接手动提交。</p>'
-        : ''
-    }
   </div>`;
 }
 
@@ -915,6 +900,8 @@ function revealTeamHtml(key) {
     <div class="reveal-tags">
       <span class="tag ${reveal.decoded ? 'good' : 'bad'}">${reveal.decoded ? '破译成功' : '破译失败 +1 黑标'}</span>
       <span class="tag ${reveal.intercepted ? 'bad' : 'good'}">${reveal.intercepted ? '被对手拦截 +1 白标' : '未被拦截'}</span>
+      ${reveal.aiEncrypted ? '<span class="tag">AI 补偿加密</span>' : ''}
+      ${reveal.compensationNext ? '<span class="tag">下轮 AI 补偿</span>' : ''}
     </div>
   </div>`;
 }

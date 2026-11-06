@@ -233,11 +233,23 @@ function limitAi(playerId, max, windowMs = 60_000) {
 }
 
 function queueAutoEncrypt(room) {
-  if (room.settings.aiMode !== 'auto' || room.phase !== PHASE.ENCRYPT) return;
+  if (room.phase !== PHASE.ENCRYPT) return;
 
   for (const key of ['A', 'B']) {
     const team = room.teams[key];
-    if (team.submissions.clues || team.aiRunning) continue;
+    if (!team.aiEncrypt || team.submissions.clues || team.aiRunning) continue;
+
+    if (!ai.isConfigured()) {
+      if (room.fallbackAiToHuman(key)) {
+        io.to(roomKey(room.id)).emit('notice', {
+          type: 'error',
+          text: '服务器未配置 AI，补偿加密无法触发，本轮改回人工加密。',
+        });
+        broadcast(room);
+      }
+      continue;
+    }
+
     team.aiRunning = true;
 
     ai.generateClues({
@@ -246,20 +258,15 @@ function queueAutoEncrypt(room) {
       archive: team.archive.map((column) => column.map((entry) => ({ ...entry }))),
     })
       .then((result) => {
-        try {
-          room.submitClues(team.encoderId, result.clues, 'AI');
-        } catch (error) {
-          io.to(roomKey(room.id)).emit('notice', {
-            type: 'error',
-            text: `AI 线索提交失败：${error.message}`,
-          });
-        }
+        room.submitAiClues(key, result.clues);
       })
       .catch((error) => {
-        io.to(roomKey(room.id)).emit('notice', {
-          type: 'error',
-          text: `AI 自动加密失败：${error.message}。加密者可以手动输入线索。`,
-        });
+        if (room.fallbackAiToHuman(key)) {
+          io.to(roomKey(room.id)).emit('notice', {
+            type: 'error',
+            text: `AI 加密失败：${error.message}。本轮改回人工加密，请加密者手动写线索。`,
+          });
+        }
       })
       .finally(() => {
         team.aiRunning = false;
@@ -385,30 +392,6 @@ io.on('connection', (socket) => {
     room.restart(player.id);
     broadcast(room);
     return {};
-  });
-
-  handle(socket, 'ai_clues', async () => {
-    const { room, player } = contextOf(socket);
-    const team = room.teams[player.team];
-
-    if (room.phase !== PHASE.ENCRYPT) throw new GameError('现在不是加密阶段');
-    if (team.encoderId !== player.id) throw new GameError('只有本队加密者可以生成线索');
-    if (team.submissions.clues) throw new GameError('本轮线索已经提交');
-    if (team.aiRunning) throw new GameError('AI 正在生成本轮线索，请稍等');
-
-    limitAi(player.id, 6);
-    team.aiRunning = true;
-    try {
-      const result = await ai.generateClues({
-        keywords: [...team.keywords],
-        code: [...team.code],
-        archive: team.archive.map((column) => column.map((entry) => ({ ...entry }))),
-      });
-      return { clues: result.clues, note: result.note || '' };
-    } finally {
-      team.aiRunning = false;
-      broadcast(room);
-    }
   });
 
   handle(socket, 'ai_analyze', async () => {

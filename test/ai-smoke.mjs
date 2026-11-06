@@ -169,6 +169,82 @@ try {
 
   console.log('AI 自动加密成功，当前阶段：', intercept.phase);
   console.log('线索：', intercept.teams.A.clues.join(' / '));
+
+  // ===== 场景 2：A 队破译失败 -> 下一轮 AI 补偿 =====
+  const c = connect();
+  const d = connect();
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const room2 = await emit(c, 'create', {
+      name: '丙',
+      packId: 'default',
+      settings: { aiMode: 'compensate', maxRounds: 8 },
+    });
+    assert(room2.ok, `补偿场景建房失败：${room2.error}`);
+    assert((await emit(d, 'join', { name: '丁', roomId: room2.roomId })).ok, '补偿场景加入失败');
+    assert((await emit(c, 'start', {})).ok, '补偿场景开局失败');
+
+    const encrypt2 = await waitFor(
+      c,
+      (state) => state.phase === 'encrypt' && Array.isArray(state.teams.A.code),
+      '补偿场景进入加密'
+    );
+    const codeA = encrypt2.teams.A.code;
+
+    const viewB = await waitFor(
+      d,
+      (state) => state.phase === 'encrypt' && Array.isArray(state.teams.B.code),
+      'B 队看到自己的密码'
+    );
+    const codeB = viewB.teams.B.code;
+
+    assert((await emit(c, 'clues', { clues: ['丙线索一', '丙线索二', '丙线索三'] })).ok, 'A 提交线索失败');
+    assert((await emit(d, 'clues', { clues: ['丁线索一', '丁线索二', '丁线索三'] })).ok, 'B 提交线索失败');
+    await waitFor(c, (state) => state.phase === 'intercept', '补偿场景进入拦截');
+
+    await emit(c, 'intercept', { code: [1, 2, 3] });
+    await emit(d, 'intercept', { code: [1, 2, 3] });
+    await waitFor(c, (state) => state.phase === 'decode', '补偿场景进入破译');
+
+    // A 故意破译错（把三位轮换），B 正确
+    assert(
+      (await emit(c, 'decode', { code: [codeA[1], codeA[2], codeA[0]] })).ok,
+      'A 提交错误破译失败'
+    );
+    assert((await emit(d, 'decode', { code: codeB })).ok, 'B 提交正确破译失败');
+
+    const reveal2 = await waitFor(
+      c,
+      (state) => state.phase === 'reveal' || state.phase === 'ended',
+      '补偿场景进入结算'
+    );
+    assert(reveal2.teams.A.tokens.black === 1, 'A 应记 1 个黑标');
+    assert(reveal2.teams.A.compensationPending === true, 'A 应进入补偿待触发状态');
+
+    assert((await emit(c, 'next_round', {})).ok, '进入补偿轮失败');
+    const compensated = await waitFor(
+      c,
+      (state) => state.phase === 'encrypt' && state.teams.A.aiEncrypt === true,
+      'A 队进入 AI 补偿加密'
+    );
+    assert(compensated.teams.A.encoderId === 'AI', '补偿轮加密者应为 AI');
+    assert(compensated.teams.A.code === null, '补偿轮不应下发密码');
+    assert(compensated.you.isEncoder === false, 'AI 加密时没有人类加密者');
+
+    // B 仍人工，提交后等待 A 的 AI 线索
+    assert((await emit(d, 'clues', { clues: ['丁二一', '丁二二', '丁二三'] })).ok, 'B 第二轮线索失败');
+    const afterAi = await waitFor(c, (state) => state.phase === 'intercept', '补偿轮 AI 线索提交');
+    assert(
+      JSON.stringify(afterAi.teams.A.clues) === JSON.stringify(MOCK_CLUES),
+      '补偿轮 A 队线索应来自 AI'
+    );
+    console.log('补偿轮 AI 线索：', afterAi.teams.A.clues.join(' / '));
+  } finally {
+    c.close();
+    d.close();
+  }
+
   console.log('\n✅ AI 链路冒烟测试通过');
 } finally {
   if (a) a.close();
