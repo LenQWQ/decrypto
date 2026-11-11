@@ -284,7 +284,12 @@ textarea { resize: vertical; line-height: 1.5; }
 }
 .settings-grid .field { margin-bottom: 0; }
 
-.pack-list { display: grid; gap: 8px; margin-bottom: 12px; }
+.pack-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
 
 .pack-item {
   display: flex;
@@ -649,6 +654,7 @@ code {
   .team-grid { grid-template-columns: 1fr; }
   .settings-grid { grid-template-columns: 1fr; }
   .upload-grid { grid-template-columns: 1fr; }
+  .pack-list { grid-template-columns: 1fr; }
   .keyword-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .reveal-grid { grid-template-columns: 1fr; }
   .archive-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
